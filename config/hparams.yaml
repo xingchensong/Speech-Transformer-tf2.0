@@ -1,0 +1,52 @@
+units_type: character
+feature_source: kaldi
+feature_type: fbank
+
+data:
+    name: libriSpeech
+    window_size: 25 # ms
+    hop_size: 10    # ms
+    train:
+        batch_size: 32
+        batch_frames: 20000
+    dev:
+        batch_size: 4
+
+model:
+    vocab_size: 31 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
+    fbanks: 80
+    res_dropout: 0.1
+    att_dropout: 0.1
+    conv_channels: 64
+    pcl: 0.8 # probability of correct label
+    d_model: 256 # d_k = d_v = d_q = d_model/n_heads = 128
+    n_heads: 4
+    # fine-tune hyper params
+    N_encoder: 6
+    N_decoder: 6
+    d_ff: 1024
+
+training:
+    use_gpu: True
+    num_gpu: 1
+    gpu_ids: 0
+    max_steps: 100000 # need to be modified
+    epoches: None # need to be specified
+    label_smoothing_epsilon: 0.1
+    neighborhood_smoothing: True
+    visualization: True
+    show_interval: 10
+    save_model: logdir/logging/transformer
+    dev_on_training: False
+
+
+optimizer:
+    warmup_n: 25000
+    k: 10  # note: decreased k to 1 when the model converged
+    beta1: 0.9
+    beta2: 0.98
+    epsilon: 1e-9
+
+decode:
+    beam_size: 10
+    length_penalty: 1.0
