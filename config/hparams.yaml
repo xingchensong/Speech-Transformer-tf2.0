@@ -13,10 +13,10 @@ data:
         batch_size: 4
 
 model:
+    name: S_Transformer
     vocab_size: 31 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
     fbanks: 80
-    res_dropout: 0.1
-    att_dropout: 0.1
+    dropout: 0.1
     conv_channels: 64
     pcl: 0.8 # probability of correct label
     d_model: 256 # d_k = d_v = d_q = d_model/n_heads = 128
@@ -31,7 +31,7 @@ training:
     num_gpu: 1
     gpu_ids: 0
     max_steps: 100000 # need to be modified
-    epoches: None # need to be specified
+    epoches: 30 # need to be specified
     label_smoothing_epsilon: 0.1
     neighborhood_smoothing: True
     visualization: True

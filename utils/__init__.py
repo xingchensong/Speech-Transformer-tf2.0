@@ -38,3 +38,4 @@ class AttrDict(dict):
         if type(self[item]) is dict:
             self[item] = AttrDict(self[item])
         return self[item]
+

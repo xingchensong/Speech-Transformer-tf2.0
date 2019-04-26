@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from positional_encoding import positional_encoding
 
 
-class Encoder(tf.keras.layers.Layer):
+class Encoder(tf.keras.Model):
     def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size,
                  rate=0.1):
         super(Encoder, self).__init__()
@@ -13,7 +13,7 @@ class Encoder(tf.keras.layers.Layer):
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model)
+        self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model,name='enc_embedding')
         self.pos_encoding = positional_encoding(input_vocab_size, self.d_model)
 
         self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate)
@@ -21,7 +21,9 @@ class Encoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(rate)
 
-    def call(self, x, training, mask):
+    def call(self, inputs, training):
+        x = inputs[0]
+        mask = inputs[1]
         seq_len = tf.shape(x)[1]
 
         # adding embedding and position encoding.
@@ -51,7 +53,8 @@ if __name__=='__main__':
     sample_encoder = Encoder(num_layers=2, d_model=512, num_heads=8,
                              dff=2048, input_vocab_size=8500)
 
-    sample_encoder_output = sample_encoder(tf.random.uniform((64, 62)),
-                                           training=False, mask=None)
+    sample_encoder_output = sample_encoder((tf.random.uniform((64, 62)),None)
+                                           ,training=False)
 
+    sample_encoder.summary()
     print(sample_encoder_output.shape)  # (batch_size, input_seq_len, d_model)
