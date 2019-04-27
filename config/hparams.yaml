@@ -1,16 +1,20 @@
 units_type: character
 feature_source: kaldi
 feature_type: fbank
-
-data:
-    name: libriSpeech
-    window_size: 25 # ms
-    hop_size: 10    # ms
-    train:
-        batch_size: 32
-        batch_frames: 20000
-    dev:
-        batch_size: 4
+data_name: libriSpeech
+window_size: 0.025   # s
+hop_size: 0.010      # s
+frame_rate: 0.030    # s
+preemphasis: 0.98
+data_length: None # None for all data
+data_path: E:\corpus_en
+shuffle: True
+left_context_width: 3
+right_context_width: 0
+apply_cmvn: True
+max_input_length: 1500 # max frames of input_data
+max_target_length: 50  # max chars of input_label
+num_mels: 80
 
 model:
     name: S_Transformer
@@ -26,7 +30,10 @@ model:
     N_decoder: 6
     d_ff: 1024
 
-training:
+train:
+    seed: 2019
+    batch_size: 32
+    batch_frames: 20000
     use_gpu: True
     num_gpu: 1
     gpu_ids: 0
@@ -39,6 +46,8 @@ training:
     save_model: logdir/logging/transformer
     dev_on_training: False
 
+test:
+    batch_size: 4
 
 optimizer:
     warmup_n: 25000
