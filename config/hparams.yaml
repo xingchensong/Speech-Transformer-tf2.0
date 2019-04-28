@@ -4,9 +4,9 @@ feature_type: fbank
 data_name: libriSpeech
 window_size: 0.025   # s
 hop_size: 0.010      # s
-frame_rate: 0.030    # s
+frame_rate: 30    # ms
 preemphasis: 0.98
-data_length: None # None for all data
+data_length: False # None for all data
 data_path: E:\corpus_en
 shuffle: True
 left_context_width: 3
@@ -20,6 +20,7 @@ model:
     name: S_Transformer
     vocab_size: 31 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
     fbanks: 80
+    feature_dim: 320 # fbanks * (left_context_width + right_context_width + 1)
     dropout: 0.1
     conv_channels: 64
     pcl: 0.8 # probability of correct label

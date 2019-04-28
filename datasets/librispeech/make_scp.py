@@ -3,8 +3,8 @@ from os.path import join, basename
 from glob import glob
 import numpy as np
 
-data_path = 'E:\corpus_en\LibriSpeech_small'
-large = True
+data_path = 'E:\corpus_en\LibriSpeech'
+large = False
 medium = False
 
 parts = ['train-clean-100', 'dev-clean', 'dev-other',
@@ -14,7 +14,7 @@ if large:
 elif medium:
     parts += ['train-clean-360']
 
-parts = ['dev-clean']
+# parts = ['dev-clean']
 
 # NOTE:
 ############################################################
@@ -45,6 +45,13 @@ parts = ['dev-clean']
 # Original: 65987 labels + OOV
 # - 960h
 # Original: 89114 labels + OOV
+#
+# [utterances]
+# train-clean-100:   28539 utterances
+# dev-clean:         2703 utterances
+# dev-other:         2864 utterances
+# test-clean:        2620 utterances
+# test-other:        2939 utterances
 ############################################################
 
 
@@ -55,17 +62,19 @@ uttid2utt = {}
 for part in parts:
     trans_paths = [p for p in glob(join(data_path, part, '*/*/*.trans.txt'))]
     vocab = set()
+    num_utt = 0
     for trans_path in trans_paths:
         with open(trans_path,'r') as f:
             for line in f.readlines():
+                num_utt += 1
                 pair = line.strip().split(' ',maxsplit=1)
                 uttid2utt[pair[0]] = pair[1].lower().replace(' ','_')
                 text = pair[1].lower()
                 for i in range(len(text)):
                     vocab.add(text[i])
     vocab = list(vocab)
-    print(part+': '+str(len(vocab)) + ' '+str(sorted(vocab)))
-    np.save('config/'+part+'_char.npy',sorted(vocab))
+    print(part+': '+str(num_utt)+'utterances '+str(len(vocab)) + ' '+str(sorted(vocab)))
+    # np.save('config/'+part+'_char.npy',sorted(vocab))
 # np.save('data/uttid2utt.npy',uttid2utt) # utt最后还要从字符变成数字形式
 # print(uttid2utt)
 print('Done uttid to utt')
@@ -77,6 +86,7 @@ print('Done uttid to utt')
 for part in parts:
     # part/speaker/book/*.wav
     wav_paths = [p for p in glob(join(data_path, part, '*/*/*.wav'))]
+    print(part+': '+str(len(wav_paths))+' utterances')
     with open('data/' + part + '.scp', 'w') as f:
         for wav_path in wav_paths:
             # ex.) wav_path: speaker/book/speaker-book-utt_index.wav

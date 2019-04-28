@@ -21,7 +21,7 @@ def main():
     opt = parser.parse_args()
 
     configfile = open(opt.config)
-    config = AttrDict(yaml.load(configfile))
+    config = AttrDict(yaml.load(configfile,Loader=yaml.FullLoader))
 
     log_name = config.model.name
     log_folder = os.path.join(os.getcwd(),'logging',log_name)

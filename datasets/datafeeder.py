@@ -1,4 +1,4 @@
-import librosa,sys
+import sys
 from random import shuffle
 from tqdm import tqdm
 import numpy as np
@@ -9,15 +9,17 @@ import scipy.io.wavfile as wav
 from utils import  AttrDict
 import yaml
 
-configfile = open('config/hparams.yaml')
-data_config = AttrDict(yaml.load(configfile))
+# configuration
+configfile = open('../config/hparams.yaml')
+data_config = AttrDict(yaml.load(configfile,Loader=yaml.FullLoader))
 
+# corpus transicript
 corpus = 'librispeech'
 dev_parts = [corpus+'/data/dev-clean.scp', corpus+'/data/dev-other.scp' ]
 test_parts = [corpus+'/data/test-clean.scp', corpus+'/data/test-other.scp']
-train_parts = [corpus+'/data/train-clean-100.scp',corpus+'/data/train-clean-360.scp', corpus+'/data/train-other-500.scp']
+train_parts = [corpus+'/data/train-clean-100.scp'] # ,corpus+'/data/train-clean-360.scp', corpus+'/data/train-other-500.scp']
 
-# 32 classes
+# 32 classes for final output
 PAD = 0
 UNK = 1
 BOS = 2
@@ -71,7 +73,7 @@ class DataFeeder(object):
             with open(file, 'r', encoding='utf8') as f:
                 data = f.readlines()
             for line in tqdm(data):
-                wav_file, text, id = line.split('\t')
+                wav_file, text, id = line.split('   ')
                 self.wav_lst.append(wav_file)
                 self.char_list.append(list(text))
 
@@ -93,13 +95,13 @@ class DataFeeder(object):
         return ids
 
     def wav_padding(self, wav_data_lst):
-        feature_dim = np.array(wav_data_lst).shape[-1] # 80 mels
+        feature_dim = data_config.model.feature_dim # 80 mels * 4 stack
         wav_lens = np.array([len(data) for data in wav_data_lst])  # len(data)实际上就是求语谱图的第一维的长度，也就是n_frames
         # 取一个batch中的最长
         wav_max_len = max(wav_lens)
         # TODO: 1-D conv是 三维 ，2-D conv是四维
         new_wav_data_lst = np.zeros(
-            (len(wav_data_lst), wav_max_len, feature_dim, 1))
+            (len(wav_data_lst), wav_max_len, feature_dim, 1)) # 如果增加了一阶和二阶导数则是三个channel，分别是static, first and second derivative features
         for i in range(len(wav_data_lst)):
             new_wav_data_lst[i, :wav_data_lst[i].shape[0], :, 0] = wav_data_lst[i]
         # print('new_wav_data_lst',new_wav_data_lst.shape,wav_lens.shape)
@@ -133,16 +135,16 @@ class DataFeeder(object):
                 sub_list = shuffle_list[begin:end]
                 for index in sub_list:
                     # TODO：计算频谱图
-                    fbank, n_frames = compute_fbank(self.data_path +'/'+ self.wav_lst[index])
+                    fbank = compute_fbank(self.data_path +'/'+ self.wav_lst[index],False)
 
                     pad_fbank = fbank
-                    label = self.char2id( [BOS]+self.char_list[index], self.vocab)
-                    g_truth = self.char2id( self.char_list[index]+[EOS], self.vocab)
+                    label = self.char2id( [BOS_FLAG]+self.char_list[index], self.vocab)
+                    g_truth = self.char2id( self.char_list[index]+[EOS_FLAG], self.vocab)
                     wav_data_lst.append(pad_fbank)
                     label_data_lst.append(label)
                     ground_truth_lst.append(g_truth)
 
-                # TODO：对语谱图时间维度进行第二次pad，pad成本次batch中最长的长度
+                # TODO：对频谱图时间维度进行第二次pad，pad成本次batch中最长的长度
                 # TODO: label是decoder输入 g_truth是decoder的target
                 pad_wav_data, input_length = self.wav_padding(wav_data_lst)
                 pad_label_data, label_length = self.label_padding(label_data_lst)
@@ -154,7 +156,7 @@ class DataFeeder(object):
                           'label_length': label_length.reshape(-1, 1),  # batch中的每个utt的真实长度
                           'ground_truth': pad_ground_truth
                           }
-                print('genarate one batch mel data')
+                # print('genarate one batch mel data')
                 yield inputs
         pass
 
@@ -162,11 +164,45 @@ class DataFeeder(object):
         return self.lengths
 
 
+def concat_frame(features):
+    time_steps, features_dim = np.array(features).shape
+    concated_features = np.zeros(
+        shape=[time_steps, features_dim *
+               (1 + data_config.left_context_width + data_config.right_context_width)],
+        dtype=np.float32)
 
+    # middle part is just the uttarnce
+    concated_features[:, data_config.left_context_width * features_dim:
+    (data_config.left_context_width + 1) * features_dim] = features
 
-def compute_fbank(file):
+    for i in range(data_config.left_context_width):
+        # add left context
+        concated_features[i + 1:time_steps,
+        (data_config.left_context_width - i - 1) * features_dim:
+        (data_config.left_context_width - i) * features_dim] = features[0:time_steps - i - 1, :]
+
+    for i in range(data_config.right_context_width):
+        # add right context
+        concated_features[0:time_steps - i - 1,
+        (data_config.right_context_width + i + 1) * features_dim:
+        (data_config.right_context_width + i + 2) * features_dim] = features[i + 1:time_steps, :]
+
+    return concated_features
+
+def subsampling(features):
+    if data_config.frame_rate != 0:
+        interval = int(data_config.frame_rate / 10)
+        temp_mat = [features[i]
+                    for i in range(0, features.shape[0], interval)]
+        subsampled_features = np.row_stack(temp_mat)
+        return subsampled_features
+    else:
+        return features
+
+def compute_fbank(file,debug=True):
     sr, signal = wav.read(file)
-    signal = signal[:, 0]
+    if debug:
+        print('signal shape: ',signal.shape)
     # Pre-emphasizing.
     signal_preemphasized = processing.preemphasis(signal, cof=data_config.preemphasis)
     # Stacking frames
@@ -177,7 +213,8 @@ def compute_fbank(file):
 
     # Extracting power spectrum
     power_spectrum = processing.power_spectrum(frames, fft_points=512) # num_frames x fft_length
-    print('power spectrum shape=', power_spectrum.shape)
+    if debug:
+        print('power spectrum shape=', power_spectrum.shape)
 
     ############# Extract fbanks features #############
     log_fbank = feature.lmfe(signal,sampling_frequency=sr,frame_length=data_config.window_size,
@@ -188,15 +225,38 @@ def compute_fbank(file):
     if data_config.apply_cmvn:
         # Cepstral mean variance normalization.
         log_fbank_cmvn = processing.cmvn(log_fbank, variance_normalization=True)
-        print('fbank(mean + variance normalized) feature shape=', log_fbank_cmvn.shape)
-        log_fbank = log_fbank_cmvn
+        if debug:
+            print('fbank(mean + variance normalized) feature shape=', log_fbank_cmvn.shape)
+        log_fbank = log_fbank_cmvn # num_frames x num_filters
 
-    # Extracting derivative features
-    log_fbank_feature_cube = feature.extract_derivative_feature(log_fbank)
-    print('log fbank feature cube shape=', log_fbank_feature_cube.shape) # num_frames x num_filters x 3
+    # # Extracting derivative features
+    # log_fbank_feature_cube = feature.extract_derivative_feature(log_fbank)
+    # print('log fbank feature cube shape=', log_fbank_feature_cube.shape) # num_frames x num_filters x 3
 
-    return log_fbank_feature_cube
+    # frameSlice and dowmSampling
+    concat_mat = concat_frame(log_fbank)
+    log_fbank = subsampling(concat_mat)
+    if debug:
+        print('concat & subsample shape=', log_fbank.shape)
+
+    return log_fbank
 
 if __name__=='__main__':
-    a = 'Do you '
-    print(list(a.lower().replace(' ','_')))
+    # a = 'Do you '
+    # print(list(a.lower().replace(' ','_')))
+
+    # file = 'D:/source.wav'
+    # log_fbank = compute_fbank(file)
+    # print(log_fbank)
+
+    feeder = DataFeeder(data_config,'test')
+    data = feeder.get_batch()
+    for step, batch in enumerate(data):
+        print(batch['the_inputs'].shape)
+        print(batch['the_labels'].shape)
+        print(batch['input_length'])
+        print(batch['label_length'])
+        print(batch['ground_truth'].shape)
+        break
+
+

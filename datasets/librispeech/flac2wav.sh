@@ -61,6 +61,7 @@ for flac_path in $flac_paths ; do
     done
 done
 wait
+echo "Done~"
 # https://jerkwin.github.io/2013/12/14/Bash%E8%84%9A%E6%9C%AC%E5%AE%9E%E7%8E%B0%E6%89%B9%E9%87%8F%E4%BD%9C%E4%B8%9A%E5%B9%B6%E8%A1%8C%E5%8C%96/
 #  dir_path=$(dirname $flac_path)
 #  file_name=$(basename $flac_path)
