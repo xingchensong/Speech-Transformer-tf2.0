@@ -12,21 +12,22 @@ def scaled_dot_product_attention(q, k, v, mask):
       k: key shape == (..., seq_len_k, depth)
       v: value shape == (..., seq_len_v, depth)
       mask: Float tensor with shape broadcastable
-            to (..., seq_len_q, seq_len_k). Defaults to None.
+            to (..., seq_len_q, seq_len_k). Defaults to None. # 一般seq_len_q=seq_len_k
 
     Returns:
       output, attention_weights
     """
 
-    matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., seq_len_q, seq_len_k)
+    matmul_qk = tf.matmul(q, k, transpose_b=True)  # (N,seq_q,d_k)*(N,d_k,seq_k)=(N,seq_q,seq_k)
 
     # scale matmul_qk
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
+    # print('shape'+str(scaled_attention_logits.shape.as_list()))
 
     # add the mask to the scaled tensor.
     if mask is not None:
-        scaled_attention_logits += (mask * -1e9)
+        scaled_attention_logits += (mask * -1e9) # mask中padding部分是1,使得logits变成-inf
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
