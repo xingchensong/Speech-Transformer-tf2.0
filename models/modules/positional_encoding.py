@@ -21,4 +21,8 @@ def positional_encoding(position, d_model):
 
     pos_encoding = pos_encoding[np.newaxis, ...]
 
-    return tf.cast(pos_encoding, dtype=tf.float32)
+    return tf.cast(pos_encoding, dtype=tf.float32) # (1,pe_max_len, d_model)
+
+if __name__=='__main__':
+    pe = positional_encoding(3,5)
+    print(pe)

@@ -8,6 +8,7 @@ frame_rate: 30    # ms
 preemphasis: 0.98
 data_length: False # None for all data
 data_path: E:\corpus_en
+scp_path: D:\pycharm_proj\Speech_Transformer\datasets
 shuffle: True
 left_context_width: 3
 right_context_width: 0
@@ -18,9 +19,9 @@ num_mels: 80
 
 model:
     name: S_Transformer
-    vocab_size: 31 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
-    fbanks: 80
-    feature_dim: 320 # fbanks * (left_context_width + right_context_width + 1)
+    vocab_size: 32 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
+    pe_max_len: 8000 # position encoding length(must be longer then max_frame_length)
+    feature_dim: 320 # fbanks * (left_context_width + right_context_width + 1) == 80*4
     dropout: 0.1
     conv_channels: 64
     pcl: 0.8 # probability of correct label
@@ -33,7 +34,7 @@ model:
 
 train:
     seed: 2019
-    batch_size: 32
+    batch_size: 16
     batch_frames: 20000
     use_gpu: True
     num_gpu: 1
@@ -55,7 +56,7 @@ optimizer:
     k: 10  # note: decreased k to 1 when the model converged
     beta1: 0.9
     beta2: 0.98
-    epsilon: 1e-9
+    epsilon: 1.0e-9
 
 decode:
     beam_size: 10

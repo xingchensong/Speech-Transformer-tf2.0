@@ -1,4 +1,4 @@
-import sys
+import sys,os
 from random import shuffle
 from tqdm import tqdm
 import numpy as np
@@ -10,8 +10,8 @@ from utils import  AttrDict
 import yaml
 
 # configuration
-configfile = open('../config/hparams.yaml')
-data_config = AttrDict(yaml.load(configfile,Loader=yaml.FullLoader))
+configfile1 = open('config/hparams.yaml')
+data_config = AttrDict(yaml.load(configfile1,Loader=yaml.FullLoader))
 
 # corpus transicript
 corpus = 'librispeech'
@@ -50,7 +50,7 @@ class DataFeeder(object):
         self.apply_cmvn = config.apply_cmvn
         self.max_input_length = config.max_input_length
         self.max_target_length = config.max_target_length
-
+        self.prefix = config.scp_path
         self.source_init()
 
     def source_init(self):
@@ -70,6 +70,7 @@ class DataFeeder(object):
         self.char_list = []
         for file in read_files:
             print('load ', file, ' data...')
+            file = os.path.join(self.prefix,file)
             with open(file, 'r', encoding='utf8') as f:
                 data = f.readlines()
             for line in tqdm(data):
@@ -101,9 +102,9 @@ class DataFeeder(object):
         wav_max_len = max(wav_lens)
         # TODO: 1-D conv是 三维 ，2-D conv是四维
         new_wav_data_lst = np.zeros(
-            (len(wav_data_lst), wav_max_len, feature_dim, 1)) # 如果增加了一阶和二阶导数则是三个channel，分别是static, first and second derivative features
+            (len(wav_data_lst), wav_max_len, feature_dim)) # 如果增加了一阶和二阶导数则是三个channel，分别是static, first and second derivative features
         for i in range(len(wav_data_lst)):
-            new_wav_data_lst[i, :wav_data_lst[i].shape[0], :, 0] = wav_data_lst[i]
+            new_wav_data_lst[i, :wav_data_lst[i].shape[0], :] = wav_data_lst[i]
         # print('new_wav_data_lst',new_wav_data_lst.shape,wav_lens.shape)
         return new_wav_data_lst, wav_lens
 
@@ -140,6 +141,7 @@ class DataFeeder(object):
                     pad_fbank = fbank
                     label = self.char2id( [BOS_FLAG]+self.char_list[index], self.vocab)
                     g_truth = self.char2id( self.char_list[index]+[EOS_FLAG], self.vocab)
+                    # print(label)
                     wav_data_lst.append(pad_fbank)
                     label_data_lst.append(label)
                     ground_truth_lst.append(g_truth)
@@ -156,7 +158,7 @@ class DataFeeder(object):
                           'label_length': label_length.reshape(-1, 1),  # batch中的每个utt的真实长度
                           'ground_truth': pad_ground_truth
                           }
-                # print('genarate one batch mel data')
+                print('genarate one batch mel data')
                 yield inputs
         pass
 
@@ -252,8 +254,8 @@ if __name__=='__main__':
     feeder = DataFeeder(data_config,'test')
     data = feeder.get_batch()
     for step, batch in enumerate(data):
-        print(batch['the_inputs'].shape)
-        print(batch['the_labels'].shape)
+        print(batch['the_inputs'].shape) #(4, 146, 320)
+        print(batch['the_labels'].shape) #(4, 90)
         print(batch['input_length'])
         print(batch['label_length'])
         print(batch['ground_truth'].shape)

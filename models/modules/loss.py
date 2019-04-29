@@ -43,6 +43,7 @@ def LableSmoothingLoss(real,pred,vocab_size,epsilon):
     pred (FloatTensor): batch_size x vocab_size
     real (LongTensor): batch_size
     """
+    real = tf.cast(real,tf.int32)
     real_smoothed = label_smoothing(tf.one_hot(real,depth=vocab_size),epsilon)
     # mask = tf.math.logical_not(tf.math.equal(real, 0))
     loss_ = LableSmoothing_loss_object(real_smoothed, pred)

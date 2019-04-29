@@ -3,6 +3,7 @@ from models import Transformer,create_masks,LableSmoothingLoss,CustomSchedule
 from utils import AttrDict,init_logger,ValueWindow
 import yaml,argparse,os,time
 from tensorflow.python.ops import summary_ops_v2
+from datasets.datafeeder import DataFeeder
 
 def main():
     parser = argparse.ArgumentParser()
@@ -24,13 +25,13 @@ def main():
     config = AttrDict(yaml.load(configfile,Loader=yaml.FullLoader))
 
     log_name = config.model.name
-    log_folder = os.path.join(os.getcwd(),'logging',log_name)
+    log_folder = os.path.join(os.getcwd(),'logdir/logging',log_name)
     if not os.path.isdir(log_folder):
         os.mkdir(log_folder)
     logger = init_logger(log_folder+'/'+opt.log)
 
     # TODO: build dataloader
-    train_dataset = None
+    train_datafeeder = DataFeeder(config,'train')
 
     # TODO: build model or load pre-trained model
     global global_step
@@ -38,7 +39,11 @@ def main():
     learning_rate = CustomSchedule(config.model.d_model)
     optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=config.optimizer.beta1, beta_2=config.optimizer.beta2,
                                          epsilon=config.optimizer.epsilon)
-    model = Transformer(config=config)
+    logger.info('config.optimizer.beta1:' + str(config.optimizer.beta1))
+    logger.info('config.optimizer.beta2:' + str(config.optimizer.beta2))
+    logger.info('config.optimizer.epsilon:' + str(config.optimizer.epsilon))
+    # print(str(config))
+    model = Transformer(config=config,logger=logger)
 
     #Create the checkpoint path and the checkpoint manager. This will be used to save checkpoints every n epochs.
     checkpoint_path = log_folder
@@ -52,7 +57,6 @@ def main():
     else:
         logger.info('Start new run')
 
-    model.summary()
 
     # define metrics and summary writer
     train_loss = tf.keras.metrics.Mean(name='train_loss')
@@ -62,14 +66,21 @@ def main():
 
 
     @tf.function
-    def train_step(inp, tar):
-        tar_inp = tar[:, :-1]
-        tar_real = tar[:, 1:]
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+    def train_step(batch_data):
+        inp = batch_data['the_inputs'] # batch*time*feature
+        tar = batch_data['the_labels'] # batch*time
+        # inp_len = batch_data['input_length']
+        # tar_len = batch_data['label_length']
+        gtruth = batch_data['ground_truth']
+        tar_inp = tar
+        tar_real = gtruth
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp[:,:,0], tar_inp)
+
         with tf.GradientTape() as tape:
             predictions, _ = model((inp, tar_inp), True, enc_padding_mask,
                                          combined_mask, dec_padding_mask)
-            loss = LableSmoothingLoss(tar_real, predictions)
+            # logger.info('config.train.label_smoothing_epsilon:' + str(config.train.label_smoothing_epsilon))
+            loss = LableSmoothingLoss(tar_real, predictions,config.model.vocab_size,config.train.label_smoothing_epsilon)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         train_loss(loss)
@@ -78,21 +89,31 @@ def main():
     time_window = ValueWindow(100)
     loss_window = ValueWindow(100)
     acc_window = ValueWindow(100)
-    for epoch in config.training.epochs:
-
+    logger.info('config.train.epoches:' + str(config.train.epoches))
+    first_time = True
+    for epoch in range(config.train.epoches):
+        logger.info('start epoch '+ str(epoch))
+        logger.info('total wavs: '+ str(len(train_datafeeder)))
+        logger.info('batch size: ' + str(train_datafeeder.batch_size))
+        logger.info('batch per epoch: ' + str(len(train_datafeeder)//train_datafeeder.batch_size))
+        train_data = train_datafeeder.get_batch()
         start_time = time.time()
         train_loss.reset_states()
         train_accuracy.reset_states()
 
-        for (batch, (inp, tar)) in enumerate(train_dataset):
+        for step in range(len(train_datafeeder)//train_datafeeder.batch_size):
+            batch_data = next(train_data)
             step_time = time.time()
-            train_step(inp, tar)
+            train_step(batch_data)
+            if first_time:
+                model.summary()
+                first_time=False
             time_window.append(time.time()-step_time)
             loss_window.append(train_loss.result())
             acc_window.append(train_accuracy.result())
             message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f, acc=%.05f, avg_acc=%.05f]' % (
                     global_step, time_window.average, train_loss.result(), loss_window.average, train_accuracy.result(),acc_window.average)
-            logger.infor(message)
+            logger.info(message)
 
             if global_step % 10 == 0:
                 with summary_ops_v2.always_record_summaries():

@@ -5,19 +5,19 @@ from positional_encoding import positional_encoding
 from encoder import Encoder
 
 class Decoder(tf.keras.Model):
-    def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size,
-                 rate=0.1):
+    def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size,name,
+                 pe_max_len=8000,rate=0.1):
         super(Decoder, self).__init__()
 
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,name='dec_embedding')
-        self.pos_encoding = positional_encoding(target_vocab_size, self.d_model)
+        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,name='de_emb')
+        self.pos_encoding = positional_encoding(pe_max_len, self.d_model)
 
-        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
+        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, 'DE'+str(_),rate)
                            for _ in range(num_layers)]
-        self.dropout = tf.keras.layers.Dropout(rate)
+        self.dropout = tf.keras.layers.Dropout(rate,name='de_emb_dp')
 
     def call(self, inputs, training):
         x =inputs[0]
@@ -30,7 +30,7 @@ class Decoder(tf.keras.Model):
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        x += self.pos_encoding[:, :seq_len, :]
+        x += tf.cast(self.pos_encoding[:, :seq_len, :],x.dtype)
 
         x = self.dropout(x, training=training)
 
@@ -46,19 +46,20 @@ class Decoder(tf.keras.Model):
 
 if __name__=='__main__':
     sample_encoder = Encoder(num_layers=2, d_model=512, num_heads=8,
-                             dff=2048, input_vocab_size=8500)
+                             dff=2048, pe_max_len=8500, name='encoder')
 
-    sample_encoder_output = sample_encoder((tf.random.uniform((64, 62)),None)
-                                           ,training=False)
+    sample_encoder_output = sample_encoder((tf.random.uniform((2, 64, 62)),None)
+                                           ,training=True)
 
-    # print(sample_encoder_output.shape)  # (batch_size, input_seq_len, d_model)
+    print(sample_encoder_output.shape)  # (batch_size, input_seq_len, d_model)
 
     sample_decoder = Decoder(num_layers=2, d_model=512, num_heads=8,
-                             dff=2048, target_vocab_size=8000)
+                             dff=2048, target_vocab_size=32,name='decoder',pe_max_len=8000)
 
-    output, attn = sample_decoder((tf.random.uniform((64, 26)),sample_encoder_output,
-                                   None,None),training=False,)
+    output, attn = sample_decoder((tf.random.uniform((2, 26)),sample_encoder_output,
+                                   None,None),training=True,)
 
     sample_encoder.summary()
     sample_decoder.summary()
     print(output.shape, attn['decoder_layer2_block2'].shape)
+    # (batchsize, target_seq_len, d_model) (batchsize, numheads, target_seq_len, input_seq_len)
