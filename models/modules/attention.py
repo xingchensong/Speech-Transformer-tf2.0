@@ -124,13 +124,19 @@ class TwoD_Attention_layer(tf.keras.layers.Layer):
         self.convk = tf.keras.layers.Conv2D(c, 3, 1, 'same', kernel_initializer='glorot_normal')
         self.convv = tf.keras.layers.Conv2D(c, 3, 1, 'same', kernel_initializer='glorot_normal')
         self.conv = tf.keras.layers.Conv2D(n, 3, 1, 'same', kernel_initializer='glorot_normal')
+        self.bnq = tf.keras.layers.BatchNormalization()
+        self.bnk = tf.keras.layers.BatchNormalization()
+        self.bnv = tf.keras.layers.BatchNormalization()
+        self.ln = tf.keras.layers.experimental.LayerNormalization()
 
         self.final_conv1 = tf.keras.layers.Conv2D(n, 3, 1, 'same', activation='relu',
                                                   kernel_initializer='glorot_normal')
         self.final_conv2 = tf.keras.layers.Conv2D(n, 3, 1, 'same', kernel_initializer='glorot_normal')
+        self.bnf1 = tf.keras.layers.BatchNormalization()
+        self.bnf2 = tf.keras.layers.BatchNormalization()
         self.act = tf.keras.layers.Activation('relu')
 
-    def call(self,inputs):
+    def call(self,inputs,training):
         '''
 
         :param inputs: B*T*D*n
@@ -138,9 +144,9 @@ class TwoD_Attention_layer(tf.keras.layers.Layer):
         '''
         residual = inputs
         batch_size = tf.shape(inputs)[0]
-        q = self.convq(inputs)
-        k = self.convk(inputs)
-        v = self.convv(inputs)
+        q = self.bnq(self.convq(inputs),training=training)
+        k = self.bnk(self.convk(inputs),training=training)
+        v = self.bnv(self.convv(inputs),training=training)
 
         q_time = tf.transpose(q,[0,3,1,2])
         k_time = tf.transpose(k, [0, 3, 1, 2])
@@ -160,9 +166,10 @@ class TwoD_Attention_layer(tf.keras.layers.Layer):
 
         out = tf.concat([scaled_attention_time,scaled_attention_fre],-1) # B*T*D*2c
 
-        out = self.conv(out) + residual # B*T*D*n
+        out = self.ln(self.conv(out) + residual) # B*T*D*n
 
-        final_out = self.final_conv2(self.final_conv1(out))
+        final_out = self.bnf1(self.final_conv1(out),training=training)
+        final_out = self.bnf2(self.final_conv2(final_out),training=training)
 
         final_out = self.act(final_out + out)
 
@@ -176,22 +183,26 @@ class Pre_Net(tf.keras.layers.Layer):
 
         self.downsample = tf.keras.layers.Conv2D(n, 3, 2, 'same', activation='tanh',
                                                  kernel_initializer='glorot_normal')
+        self.bn = tf.keras.layers.BatchNormalization()
         self.downsample2 = tf.keras.layers.Conv2D(n, 3, 2, 'same', activation='tanh',
                                                   kernel_initializer='glorot_normal')
+        self.bn2 = tf.keras.layers.BatchNormalization()
 
         self.TwoD_layers = [TwoD_Attention_layer(n, c) for _ in range(num_M)]
 
-    def call(self,inputs):
+    def call(self,inputs,training):
         '''
 
         :param inputs: B*T*D*n
         :return: B*T*D*c
         '''
-        out = self.downsample2(self.downsample(inputs))
+        inputs = tf.cast(inputs,tf.float32)
+        out = self.bn(self.downsample(inputs),training=training)
+        out = self.bn2(self.downsample2(out),training=training)
         print('downsample.shape:',out.shape)
 
         for i in range(self.num_M):
-            out = self.TwoD_layers[i](out)
+            out = self.TwoD_layers[i](out,training)
 
         return out
 

@@ -41,9 +41,9 @@ class DecoderLayer(tf.keras.layers.Layer):
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
-        self.layernorm1 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6,name=name+'_LN1')
-        self.layernorm2 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6,name=name+'_LN2')
-        self.layernorm3 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6,name=name+'_LN3')
+        self.layernorm1 = tf.keras.layers.experimental.LayerNormalization(name=name+'_LN1') # epsilon used to be  1e-6
+        self.layernorm2 = tf.keras.layers.experimental.LayerNormalization(name=name+'_LN2')
+        self.layernorm3 = tf.keras.layers.experimental.LayerNormalization(name=name+'_LN3')
 
         self.dropout1 = tf.keras.layers.Dropout(rate,name=name+'_dp1')
         self.dropout2 = tf.keras.layers.Dropout(rate,name=name+'_dp2')

@@ -14,7 +14,7 @@ class Speech_transformer(tf.keras.Model):
 
     def call(self,inputs,targets,training,enc_padding_mask,look_ahead_mask,dec_padding_mask):
 
-        out = self.pre_net(inputs)
+        out = self.pre_net(inputs,training)
 
         final_out,attention_weights = self.transformer((out,targets) ,training, enc_padding_mask,
              look_ahead_mask, dec_padding_mask)
