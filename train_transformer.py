@@ -83,6 +83,7 @@ def main():
             # logger.info('config.train.label_smoothing_epsilon:' + str(config.train.label_smoothing_epsilon))
             loss = LableSmoothingLoss(tar_real, predictions,config.model.vocab_size,config.train.label_smoothing_epsilon)
         gradients = tape.gradient(loss, model.trainable_variables)
+        clipped_gradients, _ = tf.clip_by_global_norm(gradients, 1.0)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         train_loss(loss)
         train_accuracy(tar_real, predictions)
