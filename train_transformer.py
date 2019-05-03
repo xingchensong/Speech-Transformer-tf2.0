@@ -1,5 +1,5 @@
 import tensorflow as tf
-from models import Transformer,create_masks,LableSmoothingLoss,CustomSchedule
+from models import Speech_transformer,Transformer,create_masks,LableSmoothingLoss,CustomSchedule,create_combined_mask
 from utils import AttrDict,init_logger,ValueWindow
 import yaml,argparse,os,time
 from tensorflow.python.ops import summary_ops_v2
@@ -9,8 +9,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-config', type=str, default='config/hparams.yaml')
     parser.add_argument('-load_model', type=str, default=None)
-    # parser.add_argument('-fp16_allreduce', action='store_true', default=False,
-    #                     help='use fp16 compression during allreduce')
+    parser.add_argument('-model_name', type=str, default='P_S_Transformer_debug',
+                        help='model name')
     # parser.add_argument('-batches_per_allreduce', type=int, default=1,
     #                     help='number of batches processed locally before '
     #                          'executing allreduce across workers; it multiplies '
@@ -24,26 +24,27 @@ def main():
     configfile = open(opt.config)
     config = AttrDict(yaml.load(configfile,Loader=yaml.FullLoader))
 
-    log_name = config.model.name
+    log_name = opt.model_name or config.model.name
     log_folder = os.path.join(os.getcwd(),'logdir/logging',log_name)
     if not os.path.isdir(log_folder):
         os.mkdir(log_folder)
     logger = init_logger(log_folder+'/'+opt.log)
 
     # TODO: build dataloader
-    train_datafeeder = DataFeeder(config,'train')
+    train_datafeeder = DataFeeder(config,'debug')
 
     # TODO: build model or load pre-trained model
     global global_step
     global_step = 0
     learning_rate = CustomSchedule(config.model.d_model)
+    # learning_rate = 0.00002
     optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=config.optimizer.beta1, beta_2=config.optimizer.beta2,
                                          epsilon=config.optimizer.epsilon)
     logger.info('config.optimizer.beta1:' + str(config.optimizer.beta1))
     logger.info('config.optimizer.beta2:' + str(config.optimizer.beta2))
     logger.info('config.optimizer.epsilon:' + str(config.optimizer.epsilon))
     # print(str(config))
-    model = Transformer(config=config,logger=logger)
+    model = Speech_transformer(config=config,logger=logger)
 
     #Create the checkpoint path and the checkpoint manager. This will be used to save checkpoints every n epochs.
     checkpoint_path = log_folder
@@ -65,7 +66,7 @@ def main():
     summary_writer = summary_ops_v2.create_file_writer_v2(log_folder+'/train')
 
 
-    @tf.function
+    # @tf.function
     def train_step(batch_data):
         inp = batch_data['the_inputs'] # batch*time*feature
         tar = batch_data['the_labels'] # batch*time
@@ -74,11 +75,11 @@ def main():
         gtruth = batch_data['ground_truth']
         tar_inp = tar
         tar_real = gtruth
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp[:,:,0], tar_inp)
-
+        # enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp[:,:,0], tar_inp)
+        combined_mask = create_combined_mask(tar=tar_inp)
         with tf.GradientTape() as tape:
-            predictions, _ = model((inp, tar_inp), True, enc_padding_mask,
-                                         combined_mask, dec_padding_mask)
+            predictions, _ = model(inp, tar_inp, True, None,
+                                   combined_mask, None)
             # logger.info('config.train.label_smoothing_epsilon:' + str(config.train.label_smoothing_epsilon))
             loss = LableSmoothingLoss(tar_real, predictions,config.model.vocab_size,config.train.label_smoothing_epsilon)
         gradients = tape.gradient(loss, model.trainable_variables)

@@ -34,6 +34,9 @@ def scaled_dot_product_attention(q, k, v, mask):
     # add up to 1.
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
 
+    # FIXME: 可能不需要dropout https://github.com/kaituoxu/Speech-Transformer/blob/master/src/transformer/attention.py#L83
+    # attention_weights = tf.keras.layers.Dropout(rate=0.1)(attention_weights)
+
     output = tf.matmul(attention_weights, v)  # (..., seq_len_v, depth) 实际上是(..., seq_len_q, depth)，只是三种len都一样
 
     return output, attention_weights
@@ -57,11 +60,16 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model) # (feature_in_dim, d_model) 第一维不是batchsize因为可以broadcast
-        self.wk = tf.keras.layers.Dense(d_model) # (feature_in_dim, d_model)
-        self.wv = tf.keras.layers.Dense(d_model) # (feature_in_dim, d_model)
+        # https://github.com/kaituoxu/Speech-Transformer/blob/master/src/transformer/attention.py#L19
+        init  = tf.keras.initializers.RandomNormal(mean=0,stddev=np.sqrt(2.0 / (d_model + self.depth)))
+        # init = tf.keras.initializers.glorot_normal()
+        self.wq = tf.keras.layers.Dense(d_model,kernel_initializer=init) # (feature_in_dim, d_model) 第一维不是batchsize因为可以broadcast
+        self.wk = tf.keras.layers.Dense(d_model,kernel_initializer=init) # (feature_in_dim, d_model)
+        self.wv = tf.keras.layers.Dense(d_model,kernel_initializer=init) # (feature_in_dim, d_model)
 
-        self.dense = tf.keras.layers.Dense(d_model)# (feature_in_dim, d_model)
+        self.dense = tf.keras.layers.Dense(d_model,kernel_initializer='glorot_normal')# (feature_in_dim, d_model)
+
+        # self.activation = tf.keras.layers.Activation(activation='relu')
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
@@ -102,7 +110,90 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         output = self.dense(concat_attention)  # (batch_size, seq_len_v, d_model)
 
+        # output = self.activation(output)
+
         return output, attention_weights
+
+
+class TwoD_Attention_layer(tf.keras.layers.Layer):
+    def __init__(self,n = 64,c =64):
+        super(TwoD_Attention_layer, self).__init__()
+        self.n = n
+        self.c = c
+        self.convq = tf.keras.layers.Conv2D(c, 3, 1, 'same', kernel_initializer='glorot_normal')
+        self.convk = tf.keras.layers.Conv2D(c, 3, 1, 'same', kernel_initializer='glorot_normal')
+        self.convv = tf.keras.layers.Conv2D(c, 3, 1, 'same', kernel_initializer='glorot_normal')
+        self.conv = tf.keras.layers.Conv2D(n, 3, 1, 'same', kernel_initializer='glorot_normal')
+
+        self.final_conv1 = tf.keras.layers.Conv2D(n, 3, 1, 'same', activation='relu',
+                                                  kernel_initializer='glorot_normal')
+        self.final_conv2 = tf.keras.layers.Conv2D(n, 3, 1, 'same', kernel_initializer='glorot_normal')
+        self.act = tf.keras.layers.Activation('relu')
+
+    def call(self,inputs):
+        '''
+
+        :param inputs: B*T*D*n
+        :return: B*T*D*n
+        '''
+        residual = inputs
+        batch_size = tf.shape(inputs)[0]
+        q = self.convq(inputs)
+        k = self.convk(inputs)
+        v = self.convv(inputs)
+
+        q_time = tf.transpose(q,[0,3,1,2])
+        k_time = tf.transpose(k, [0, 3, 1, 2])
+        v_time = tf.transpose(v, [0, 3, 1, 2])
+
+        q_fre = tf.transpose(q,[0,3,2,1])
+        k_fre = tf.transpose(k, [0, 3, 2, 1])
+        v_fre = tf.transpose(v, [0, 3, 2, 1])
+
+        scaled_attention_time, attention_weights_time = scaled_dot_product_attention(
+            q_time, k_time, v_time, None)  # B*c*T*D
+        scaled_attention_fre, attention_weights_fre = scaled_dot_product_attention(
+            q_fre, k_fre, v_fre, None)     # B*c*D*T
+
+        scaled_attention_time = tf.transpose(scaled_attention_time,[0,2,3,1])
+        scaled_attention_fre = tf.transpose(scaled_attention_fre,[0,3,2,1])
+
+        out = tf.concat([scaled_attention_time,scaled_attention_fre],-1) # B*T*D*2c
+
+        out = self.conv(out) + residual # B*T*D*n
+
+        final_out = self.final_conv2(self.final_conv1(out))
+
+        final_out = self.act(final_out + out)
+
+        return final_out
+
+
+class Pre_Net(tf.keras.layers.Layer):
+    def __init__(self,num_M=2,n=64,c=64):
+        super(Pre_Net, self).__init__()
+        self.num_M = num_M
+
+        self.downsample = tf.keras.layers.Conv2D(n, 3, 2, 'same', activation='tanh',
+                                                 kernel_initializer='glorot_normal')
+        self.downsample2 = tf.keras.layers.Conv2D(n, 3, 2, 'same', activation='tanh',
+                                                  kernel_initializer='glorot_normal')
+
+        self.TwoD_layers = [TwoD_Attention_layer(n, c) for _ in range(num_M)]
+
+    def call(self,inputs):
+        '''
+
+        :param inputs: B*T*D*n
+        :return: B*T*D*c
+        '''
+        out = self.downsample2(self.downsample(inputs))
+        print('downsample.shape:',out.shape)
+
+        for i in range(self.num_M):
+            out = self.TwoD_layers[i](out)
+
+        return out
 
 
 if __name__=='__main__':

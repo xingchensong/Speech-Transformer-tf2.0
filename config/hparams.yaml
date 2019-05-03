@@ -10,7 +10,7 @@ data_length: False # None for all data
 data_path: E:\corpus_en
 scp_path: D:\pycharm_proj\Speech_Transformer\datasets
 shuffle: True
-left_context_width: 3
+left_context_width: 0
 right_context_width: 0
 apply_cmvn: True
 max_input_length: 1500 # max frames of input_data
@@ -19,11 +19,13 @@ num_mels: 80
 
 model:
     name: S_Transformer
-    vocab_size: 32 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
+    num_M: 2
+    n: 64
+    c: 64
+    vocab_size: 31 #  26 lowercase letters, apostrophe, period, space, noise marker and end-of-sequence tokens
     pe_max_len: 8000 # position encoding length(must be longer then max_frame_length)
     feature_dim: 320 # fbanks * (left_context_width + right_context_width + 1) == 80*4
     dropout: 0.1
-    conv_channels: 64
     pcl: 0.8 # probability of correct label
     d_model: 256 # d_k = d_v = d_q = d_model/n_heads = 128
     n_heads: 4
@@ -61,3 +63,6 @@ optimizer:
 decode:
     beam_size: 10
     length_penalty: 1.0
+
+debug:
+    batch_size: 4

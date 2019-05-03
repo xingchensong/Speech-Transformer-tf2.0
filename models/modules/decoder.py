@@ -11,13 +11,19 @@ class Decoder(tf.keras.Model):
 
         self.d_model = d_model
         self.num_layers = num_layers
+        print('self.num_layers(decoder): ', self.num_layers)
 
-        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,name='de_emb')
+        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,name='de_emb',embeddings_initializer='normal')
         self.pos_encoding = positional_encoding(pe_max_len, self.d_model)
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, 'DE'+str(_),rate)
                            for _ in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate,name='de_emb_dp')
+
+        # FIXME: 是否需要Share the weight matrix between target word embedding & the final logit dense layer
+        # https://github.com/kaituoxu/Speech-Transformer/blob/master/src/transformer/decoder.py#L48
+        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
+        self.final_layer.set_weights(self.embedding.get_weights())
 
     def call(self, inputs, training):
         x =inputs[0]
@@ -29,10 +35,10 @@ class Decoder(tf.keras.Model):
         attention_weights = {}
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
-        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        x *= tf.math.rsqrt(tf.cast(self.d_model, tf.float32))
         x += tf.cast(self.pos_encoding[:, :seq_len, :],x.dtype)
 
-        x = self.dropout(x, training=training)
+        # x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
             x, block1, block2 = self.dec_layers[i](x, enc_output, training,
@@ -41,7 +47,10 @@ class Decoder(tf.keras.Model):
             attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
             attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
 
-        # x.shape == (batch_size, target_seq_len, d_model)
+        # before softmax
+        x = self.final_layer(x)
+
+        # x.shape == (batch_size, target_seq_len, target_vocab_size if proj else d_model)
         return x, attention_weights
 
 if __name__=='__main__':
@@ -59,7 +68,7 @@ if __name__=='__main__':
     output, attn = sample_decoder((tf.random.uniform((2, 26)),sample_encoder_output,
                                    None,None),training=True,)
 
-    sample_encoder.summary()
-    sample_decoder.summary()
+    # sample_encoder.summary()
+    # sample_decoder.summary()
     print(output.shape, attn['decoder_layer2_block2'].shape)
     # (batchsize, target_seq_len, d_model) (batchsize, numheads, target_seq_len, input_seq_len)

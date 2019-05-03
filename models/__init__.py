@@ -1,5 +1,6 @@
 from modules import *
 from transformer import Transformer
+from model import Speech_transformer
 
 if __name__=='__main__':
     sample_encoder = Encoder(num_layers=2, d_model=512, num_heads=8, dff=2048, input_vocab_size=8500)

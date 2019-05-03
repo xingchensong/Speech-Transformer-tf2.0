@@ -44,7 +44,7 @@ class Transformer(tf.keras.Model):
         self.decoder = Decoder(num_dec_layers, d_model, num_heads, dff,
                                target_vocab_size, 'decoder',pe_max_len,rate)
 
-        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
+        # self.final_layer = tf.keras.layers.Dense(target_vocab_size)
 
     def call(self, inputs , training, enc_padding_mask,
              look_ahead_mask, dec_padding_mask):
@@ -58,7 +58,8 @@ class Transformer(tf.keras.Model):
         dec_output, attention_weights = self.decoder(
             (tar, enc_output,  look_ahead_mask, dec_padding_mask),training)
 
-        final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
+        # final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
+        final_output = dec_output
 
         return final_output, attention_weights
 

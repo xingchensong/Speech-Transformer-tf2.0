@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
-LableSmoothing_loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True, reduction='none')
+loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+LableSmoothing_loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 
 def label_smoothing(inputs, epsilon=0.1):
     '''Applies label smoothing. See https://arxiv.org/abs/1512.00567.
@@ -44,7 +44,9 @@ def LableSmoothingLoss(real,pred,vocab_size,epsilon):
     real (LongTensor): batch_size
     """
     real = tf.cast(real,tf.int32)
+    # print(real)
     real_smoothed = label_smoothing(tf.one_hot(real,depth=vocab_size),epsilon)
+    # print(real_smoothed)
     # mask = tf.math.logical_not(tf.math.equal(real, 0))
     loss_ = LableSmoothing_loss_object(real_smoothed, pred)
 
