@@ -1,5 +1,6 @@
-# ASR-Transformer
+# ASR-Transformer-plus-2DAttention
 A tensorflow2.0 implementation of Speech Transformer [1], an end-to-end automatic speech recognition with [Transformer](https://arxiv.org/abs/1706.03762) [4] network, which directly converts acoustic features to character sequence using a single nueral network.
+ps: 2DAttention used for feature extraction ,more details can be found in paper[1]
 
 ## Install
 - Python3 (recommend Anaconda)
